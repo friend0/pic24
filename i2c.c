@@ -9,20 +9,18 @@
 #include "I2.h"
 #include "PIC24.h"
 #include "AD.h"
+#include "timers.h"
 
-
-
-unsigned int count = 0;
-
-unsigned char temp;
-static unsigned int dIndex, channel;
+static unsigned int dIndex = 0, channel = 0;
 volatile char write_byte = 0;
-volatile char  dataRead = 0;
+volatile char dataRead = 0;
 
-unsigned char i2c_i;                            // used for i2c transceiving
-unsigned int tx_data[NUM_ANALOG] = {[0 ... NUM_ANALOG-1] = 0};   //Load analog values here
-unsigned char rx_data[7];
+unsigned int tx_data[NUM_ANALOG] = {0, 0, 0, 0}; //Load analog values here
 
+
+unsigned int config1 = 0;
+unsigned int config2 = 0;
+unsigned int i=0;
 /////////////////////////////////////////////////////////////////
 //
 //             I2C Initialization Routine
@@ -33,23 +31,29 @@ unsigned char rx_data[7];
 //
 ///////////////////////////////////////////////////////////////////
 
-void i2c_init(void){
-    I2C1ADD = I2C_ADDR;                 //set SLAVE address
-    IFS1bits.SI2C1IF = 0;               // clears the I2C Slave interrupt flag
-    IEC1bits.SI2C1IE = 0;               // Enable Slave interrupt
+void i2c_init(void) {
 
+    CloseI2C2();
+    I2C2ADD = I2C_ADDR; //set SLAVE address
+    I2C2CONbits.I2CEN = 1; //enables the I2c module
 
-    IFS1bits.MI2C1IF = 0;               // clears the I2C M interrupt flag
-    IEC1bits.MI2C1IE = 1;               // enables I2C Slave Interrupt
+    I2C2CONbits.IPMIEN = 1;
+    I2C2CONbits.DISSLW = 1;
+    I2C2CONbits.GCEN = 1; //General Call Enable bit (when operating as I2C slave)
+    I2C2CONbits.SCLREL = 0;
+    I2C2CONbits.STREN = 1; //enables clock stretch??
 
-    I2C1CONbits.I2CEN = 1;              //enables the I2c module
-    I2C1CONbits.GCEN = 1;
-    I2C1CONbits.IPMIEN = 0;             //enable slave address masking?
-    I2C1CONbits.SCLREL = 0;              //enables clock stretch??
-    I2C1CONbits.STREN = 1;              //enables clock stretch??
-
-    OpenI2C1(I2C1_ON, 0);		// BRG is not used for I2C slave
-    I2C1ADD = 0x61;
+    //OpenI2C2(I2C2_ON, 0); // BRG is not used for I2C slave
+    //I2C2ADD = 0xA2;
+    I2C2TRN = 0;
+    config1 = (I2C2_ON | I2C2_7BIT_ADD | I2C2_CLK_REL | I2C2_STR_EN  );
+    config2 = 0;
+    //I2C2TRN = 0;
+    I2C2CONbits.GCEN = 1; //General Call Enable bit (when operating as I2C slave)
+    IFS3bits.SI2C2IF = 0;               // clears the I2C Slave interrupt flag
+    IEC3bits.SI2C2IE = 1;               // Enable Slave interrupt
+    //This defines I2C to be slave
+    OpenI2C2(config1,config2);
 }
 
 
@@ -63,75 +67,75 @@ void i2c_init(void){
 //
 ///////////////////////////////////////////////////////////////////
 
-void __attribute__((interrupt, no_auto_psv)) _SI2C1Interrupt(void)
-{
+typedef enum {
+    IDLE,
+    WAIT_FOR_ADDR,
+    WAIT_FOR_WRITE,
+    SEND_READ_DATA,
+    SEND_READ_LAST_DATA
+} STATE;
 
-    // check for MASTER and Bus events and respond accordingly
-    if (IFS1bits.MI2C1IF == 1) {
-        IFS1bits.MI2C1IF = 0;               //Clear the I2C Master interrupt flag
-            return;
+volatile STATE i2_state = WAIT_FOR_ADDR;
+volatile unsigned int idx = -1, count = 0, lastState, currentState, tmp = 0;
+
+void __attribute__((interrupt, no_auto_psv)) _SI2C2Interrupt(void) {
+    IFS3bits.SI2C2IF = 0; // clears the I2C S interrupt flag
+
+    switch (i2_state) {
+
+        case WAIT_FOR_ADDR:
+            TRISBbits.TRISB10 = 0;              //Set tristate to digital out
+            TRISBbits.TRISB11 = 1;              //Set tristate to digital out
+            //ClrWdt();
+            //if(I2C2STATbits.D_A == 0){
+                if (I2C2STATbits.R_W) {
+
+                    idx = -1;
+                    tmp = I2C2RCV;
+                    while(_RBF);
+                    //I2C2TRN = (temp); //get first data byte
+                    I2C2TRN = Get_AD(++idx);
+                    I2C2CONbits.SCLREL = 1; //release clock line so MASTER can drive it
+                    while(_TBF);
+
+                    i2_state = SEND_READ_DATA; //read transaction
+                } else i2_state = WAIT_FOR_WRITE;
+            //}
+            break;
+
+
+        case WAIT_FOR_WRITE:
+
+            tmp = I2C2RCV;
+            while(_RBF);
+            idx = -1;
+            //character arrived, place in buffer
+            //TRISBbits.TRISB10 = ~TRISBbits.TRISB10; //Set tristate to digital out
+            i2_state = WAIT_FOR_ADDR;
+            break;
+
+        case SEND_READ_DATA:
+            _SWDTEN = 1;
+            TRISBbits.TRISB11 = 0;              //Set tristate to digital out
+            TRISBbits.TRISB10 = 1;              //Set tristate to digital out
+            I2C2TRN = Get_AD(++idx); //get first data byte
+            I2C2CONbits.SCLREL = 1; //release clock line so MASTER can drive it
+            while(_TBF);
+            if(idx == 7){i2_state = WAIT_FOR_ADDR; idx = -1; _SWDTEN = 0;}
+            
+            break;
+
+        case SEND_READ_LAST_DATA:
+
+            idx = -1;
+            i2_state = WAIT_FOR_ADDR;
+            break;
+
+        default:
+            idx = -1;
+            i2_state = WAIT_FOR_ADDR;
+
     }
-    if (I2C1STATbits.BCL == 1) {            //Bus Collision: need to respond accordingly?
-        I2C1STATbits.BCL = 1;               // enables I2C Slave Interrupt
-            return;
-    }
-
-
-    if ((I2C1STATbits.R_W == 0) && (I2C1STATbits.D_A == 0)) {
-            // R/W bit = 0 --> indicates data transfer is input to slave
-            // D/A bit = 0 --> indicates last byte was address
-
-            // reset any state variables needed by a message sequence
-            // perform a dummy read of the address
-            temp = SlaveReadI2C1();
-
-
-            // release the clock to restart I2C
-            I2C1CONbits.SCLREL = 1; // release the clock
-
-    } else if ((I2C1STATbits.R_W == 0) && (I2C1STATbits.D_A == 1)) {
-            // R/W bit = 0 --> indicates data transfer is input to slave
-            // D/A bit = 1 --> indicates last byte was data
-
-
-            // writing data to our module, just store it in dataRead for now
-            //in the future, these writes could be used to execute scripts on chip, flip bits
-            dataRead = SlaveReadI2C1();
-
-            // release the clock to restart I2C
-            I2C1CONbits.SCLREL = 1; // release clock stretch bit
-
-    } else if ((I2C1STATbits.R_W == 1) && (I2C1STATbits.D_A == 0)) {
-            // R/W bit = 1 --> indicates data transfer is output from slave
-            // D/A bit = 0 --> indicates last byte was address
-
-            // read of the slave device, read the address
-            temp = SlaveReadI2C1();
-            dIndex = 0;
-            channel = 0;
-            SlaveWriteI2C1(dataRead);       //puts written data in register, releases clock
-
-    } else if ((I2C1STATbits.R_W == 1) && (I2C1STATbits.D_A == 1)) {
-            // R/W bit = 1 --> indicates data transfer is output from slave
-            // D/A bit = 1 --> indicates last byte was data
-
-
-            // output the data until the MASTER terminates the
-            // transfer with a NACK, continuing reads return 0
-            if (dIndex == 0) {     //we are going to get 8 events after first address bit (1-8)
-                dIndex++;
-
-                if(dIndex % 2 == 1){write_byte = (Get_AD(channel) & 0x00FF);}     //get the lower byte of current chennel
-                else if(dIndex % 2 == 0){write_byte = (Get_AD(channel) & 0xFF00); channel++;}     //get upper byte, increment channel
-                SlaveWriteI2C1(write_byte);        //writes byte
-
-            } else  SlaveWriteI2C1(0);
-
-    }
-
-    IFS1bits.SI2C1IF = 0;               // clears the I2C1 Slave interrupt flag
-    //IFS1bits.MI2C1IF = 0;               // clears the I2C M interrupt flag
-
+  
 }
-
 

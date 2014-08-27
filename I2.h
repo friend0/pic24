@@ -8,7 +8,7 @@
 #ifndef I2_H
 #define	I2_H
 
-#define I2C_ADDR 0x41
+#define I2C_ADDR 0xA2
 
 void i2c_init(void);
 

@@ -28,16 +28,9 @@
  ******************************************************************************/
 
 
-static unsigned int ADC_Values[NUM_ANALOG] = {0, 0, 0, 0};
 
-/**
- * @Function AD_Init
- * @param None
- * @return SUCCESS or ERROR
- * @brief  Initializes the A/D subsystem 
- * @author Ryan Rodriguez */
 void AD_Init(void);
-
-unsigned int Get_AD(int channel);
+unsigned int Get_AD(short int channel);
+unsigned int Get_AD16(short int channel);
 
 #endif

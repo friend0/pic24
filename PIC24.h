@@ -8,6 +8,15 @@
 #ifndef PIC24_H
 #define	PIC24_H
 
+#ifndef SUCCESS
+#define SUCCESS 1
+#define FAILURE 0
+#endif
+#ifndef TRUE
+#define TRUE 1
+#define FALSE 0
+#endif
+
 #define NUM_ANALOG 4
 
 void Board_Init(void);
