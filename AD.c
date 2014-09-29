@@ -11,6 +11,7 @@
 #include "PIC24.h"
 #include "AD.h"
 #include "timer.h"
+#include "uart.h"
 
 /*******************************************************************************
  * PRIVATE #DEFINES                                                            *
@@ -47,25 +48,26 @@
 //static char ADNewData = FALSE;
 
 volatile unsigned int ADC_Values[NUM_ANALOG * 2] = {0, 0, 0, 0, 0, 0, 0, 0}, temp;
-volatile unsigned int ADC16_Values[NUM_ANALOG] = {0, 0, 0, 0};
+volatile unsigned int ADC16_Values[NUM_ANALOG] = {0, 0, 0};
 
 
 void __attribute__((interrupt, no_auto_psv)) _T3Interrupt(void) {
     IFS0bits.T3IF = 0; //TMR3 interrupt flag must be cleared in software
     //_SWDTEN = 1;
     //ClrWdt();
-    while (!AD1CON1bits.DONE); // wait to complete the conversion
     TRISBbits.TRISB7 = ~TRISBbits.TRISB7; //Toggle LED
+
+    while (!AD1CON1bits.DONE); // wait to complete the conversion
 
 
 
     //load new analog values into memory; take an average of samples
     //Think about implementing the same filter as on pic32 end?
-    temp = (ADC1BUF0 + ADC1BUF4 + ADC1BUF8 + ADC1BUFC) >> 2;
-    ADC_Values[6] = (temp & 0x00FF);
-    ADC_Values[7] = ((temp & 0xFF00) >> 8);
+    //temp = (ADC1BUF0 + ADC1BUF4 + ADC1BUF8 + ADC1BUFC) >> 2;
+    //ADC_Values[6] = (temp & 0x00FF);
+    //ADC_Values[7] = ((temp & 0xFF00) >> 8);
 
-    ADC16_Values[3] = ((ADC_Values[7] << 8) | ADC_Values[6] );
+    //ADC16_Values[3] = ((ADC_Values[7] << 8) | ADC_Values[6] );
 
     temp = (ADC1BUF1 + ADC1BUF5 + ADC1BUF9 + ADC1BUFD) >> 2;
     ADC_Values[0] = (temp & 0x00FF);
@@ -87,6 +89,7 @@ void __attribute__((interrupt, no_auto_psv)) _T3Interrupt(void) {
 
     ADC16_Values[2] = ((ADC_Values[5] << 8) | ADC_Values[4] );
 
+    TRISBbits.TRISB7 = ~TRISBbits.TRISB7; //Toggle LED
 
     //_SWDTEN = 0;
 }
@@ -110,7 +113,8 @@ unsigned int Get_AD16(short int channel){
 }
 void AD_Init(void) {
 
-    AD1CON3 = 0x1F02; // max sample time = 31Tad, Tad = 2 x Tcy = 125ns >75ns
+    //AD1CON3 = 0x1F02; // max sample time = 31Tad, Tad = 2 x Tcy = 125ns >75ns
+    AD1CON3 = 0x1F02;
     AD1CON2 = 0; // use MUXA, AVss and AVdd are used as Vref+/-
     AD1CON1bits.SSRC = 2; // set interrupt source to tmr3
     AD1CON1bits.SIMSAM = 1; //simultaneous sampling on

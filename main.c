@@ -3,7 +3,7 @@
 ////////////////////////////////////////////////////////////
 
 
-#define FCY 8000000UL   // Almost
+#define FCY 70000000UL   // Almost
 #define USE_AND_OR	// To enable AND_OR mask setting for I2C. 
 
 #ifndef SUCCESS
@@ -24,6 +24,7 @@
 #include "PIC24.h"
 #include "uart.h"
 
+
 // FICD
 #pragma config ICS = PGD1               // ICD Communication Channel Select bits (Communicate on PGEC1 and PGED1)
 #pragma config JTAGEN = OFF             // JTAG Enable bit (JTAG is disabled)
@@ -40,12 +41,11 @@
 #pragma config WINDIS = OFF             // Watchdog Timer Window Enable bit (Watchdog Timer in Non-Window mode)
 #pragma config FWDTEN = OFF              // Watchdog Timer Enable bit (Watchdog timer always enabled)
 
-
 // FOSC
 #pragma config POSCMD = HS              // Primary Oscillator Mode Select bits (HS Crystal Oscillator Mode)
-#pragma config OSCIOFNC = OFF           // OSC2 Pin Function bit (OSC2 is clock output)
+#pragma config OSCIOFNC = ON           // OSC2 Pin Function bit (OSC2 is clock output)
 #pragma config IOL1WAY = OFF             // Peripheral pin select configuration (Allow only one reconfiguration)
-#pragma config FCKSM = CSDCMD           // Clock Switching Mode bits (Both Clock switching and Fail-safe Clock Monitor are disabled)
+#pragma config FCKSM = CSECMD           // Clock Switching Mode bits (Both Clock switching and Fail-safe Clock Monitor are disabled)
 
 // FOSCSEL
 #pragma config FNOSC = FRC              // Oscillator Source Selection (Internal Fast RC (FRC))
@@ -55,18 +55,28 @@
 #pragma config GWRP = OFF               // General Segment Write-Protect bit (General Segment may be written)
 #pragma config GCP = OFF                // General Segment Code-Protect bit (General Segment Code protect is Disabled)
 
+//_FOSC(FCKSM_CSECMD & OSCIOFNC_ON & POSCMD_NONE);
+// Configure PLL prescaler, PLL postscaler, PLL divisor (FRC )
 
-
-
-
-
+//_FOSC(FCKSM_CSECMD & OSCIOFNC_ON & POSCMD_NONE);
 
 int main(void) {
+
+
+    PLLFBD = 74; // M = 76
+    CLKDIVbits.PLLPOST = 0; // N2 = 2
+    CLKDIVbits.PLLPRE = 0; // N1=2
+    // initiate clock switch to FRC oscillator with PLL (NOSC=0b01)
+    __builtin_write_OSCCONH(0x01);
+    __builtin_write_OSCCONL(0x01);
+    while (OSCCONbits.COSC != 0b001);
+    while (OSCCONbits.LOCK != 1);
+
+
     //Hardware Inits
     //Board_Init();
     AD_Init();
-    //i2c_init();
-    UARTInit(1);
+    UARTInit(0);
 
 
 
@@ -79,23 +89,12 @@ int main(void) {
     RPOR1bits.RP37R = 1; //UART1 transmit set to Rp37 //pin14
 
 
-    ODCBbits.ODCB10 = 0; // disable open-drain mode
-    TRISBbits.TRISB10 = 1; //Set tristate to digital out
-
-    ODCBbits.ODCB11 = 0; // disable open-drain mode
-    TRISBbits.TRISB11 = 1; //Set tristate to digital out
-
-    ODCBbits.ODCB7 = 0; // disable open-drain mode
-    TRISBbits.TRISB7 = 0; //Set tristate to digital out
-
     ODCBbits.ODCB6 = 0; // disable open-drain mode
     TRISBbits.TRISB6 = 1; //Set tristate to digital in
 
-    ODCBbits.ODCB5 = 0; // disable open-drain mode
-    TRISBbits.TRISB5 = 1; //Set tristate to digital in
 
 
-    ConfigIntTimer3(T3_INT_PRIOR_4 & T3_INT_ON);
+    ConfigIntTimer3(T3_INT_PRIOR_1 & T3_INT_ON);
     OpenTimer3(T3_ON & //Timer1 ON
             T3_IDLE_CON &
             T3_GATE_OFF & //Gated mode OFF
