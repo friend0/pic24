@@ -17,20 +17,20 @@
 
 #include "PIC24.h"
 
-
 /*******************************************************************************
  * PUBLIC #DEFINES                                                             *
  ******************************************************************************/
-
 
 /*******************************************************************************
  * PUBLIC FUNCTION PROTOTYPES                                                  *
  ******************************************************************************/
 
-
-
 void AD_Init(void);
 unsigned int Get_AD(short int channel);
 unsigned int Get_AD16(short int channel);
+unsigned int Get_Filtered_AD16(short int channel);
+unsigned int Get_Last_Filtered_AD16(short int channel);
+void filter(void);
+void eventCheck(void);
 
 #endif

@@ -20,5 +20,7 @@
 #define NUM_ANALOG 3
 
 void Board_Init(void);
+void Timer_Init(void);
+
 #endif	/* PIC24_H */
 
